@@ -1,17 +1,18 @@
 import numpy as np
 from rich.console import Console
-from rich.prompt import Prompt, IntPrompt
+from rich.prompt import Prompt, IntPrompt, FloatPrompt
 from rich.table import Table
 from rich.panel import Panel
 from pathlib import Path
 
 from redes.hopfield import RedHopfield
 from redes.BAM import RedBAM  
+from redes.hamming import RedHamming
+from redes.perceptron import PerceptronSimple
 
 console = Console()
 
 def capturar_vector(mensaje, tamano, permite_salir=False):
-    # Modificado para aceptar una lista de tamaños (útil para BAM)
     tamanos_validos = tamano if isinstance(tamano, list) else [tamano]
     
     while True:
@@ -219,14 +220,96 @@ def ejecutar_bam():
             if not asociado:
                 console.print("No asocia con ningún vector de entrada memorizado.")
 
-def main():
-    console.print(Panel.fit("Simulador de Redes Neuronales\nElige el modelo que deseas ejecutar."))
-    opcion = Prompt.ask("1. Red de Hopfield\n2. Memoria Asociativa Bidireccional (BAM)\nSelecciona", choices=["1", "2"])
+def ejecutar_hamming():
+    console.print(Panel.fit("Módulo: Red de Hamming (Clasificador MAXNET)"))
     
-    if opcion == "1":
-        ejecutar_hopfield()
-    elif opcion == "2":
-        ejecutar_bam()
+    n_neuronas = IntPrompt.ask("¿Número de neuronas (Tamaño del vector N)?")
+    n_patrones = IntPrompt.ask("¿Número de patrones a memorizar (M)?")
+    
+    patrones = []
+    console.print("\nIngresa los vectores de entrenamiento (bipolares 1 o -1):")
+    for i in range(n_patrones):
+        vec = capturar_vector(f"Patrón de memoria e{i + 1}", n_neuronas)
+        patrones.append(vec)
+        
+    red = RedHamming(num_neuronas=n_neuronas, num_patrones=n_patrones)
+    red.entrenar(patrones)
+    console.print("\nRed Hamming Entrenada. Matriz de Similitud (W):")
+    console.print(red.W)
+    
+    console.print("\n--- FASE DE PRUEBA ---")
+    while True:
+        console.print("\n[Escribe 'salir' para terminar]")
+        p = capturar_vector("Ingresa vector de prueba", n_neuronas, permite_salir=True)
+        if p is None: break
+        
+        estado, ganador, iteraciones, historial = red.predecir(p)
+        
+        tabla = Table(title="Competencia MAXNET")
+        tabla.add_column("Iteración", justify="center")
+        tabla.add_column("Valores de las Neuronas")
+        
+        for it, valores in enumerate(historial):
+            tabla.add_row(str(it), str(np.round(valores, 4)))
+            
+        console.print(tabla)
+        if estado == "CONVERGE":
+            console.print(f"[EXITO] La red asocia el vector con la Memoria e{ganador + 1}")
+        else:
+            console.print("[FALLO] Las neuronas empataron y se anularon mutuamente (Resultado Nulo).")
+
+def ejecutar_perceptron():
+    console.print(Panel.fit("Módulo: Perceptrón Simple"))
+    
+    num_entradas = IntPrompt.ask("¿Número de entradas (tamaño del vector)?")
+    num_patrones = IntPrompt.ask("¿Cuántos pares de entrenamiento (X -> Y) ingresarás?")
+    tasa_lr = FloatPrompt.ask("Tasa de aprendizaje (Alpha)", default=0.1)
+    
+    X_train, Y_train = [], []
+    console.print("\nCaptura de pares:")
+    for i in range(num_patrones):
+        console.print(f"\n--- Patrón {i+1} ---")
+        x = capturar_vector("Vector de entrada X", num_entradas)
+        y = FloatPrompt.ask("Salida deseada Y (-1 o 1)")
+        X_train.append(x)
+        Y_train.append(y)
+        
+    red = PerceptronSimple(num_entradas, tasa_aprendizaje=tasa_lr)
+    historial = red.entrenar(X_train, Y_train)
+    
+    tabla = Table(title="Historial de Entrenamiento (Regla Delta)")
+    tabla.add_column("Época")
+    tabla.add_column("Pesos (W)")
+    tabla.add_column("Bias (b)")
+    tabla.add_column("Errores")
+    
+    for ep, w, b, err in historial:
+        tabla.add_row(str(ep), str(np.round(w, 4)), str(round(b, 4)), str(err))
+    console.print(tabla)
+    
+    console.print("\n--- FASE DE PRUEBA ---")
+    while True:
+        p = capturar_vector("\nIngresa vector de prueba (o 'salir')", num_entradas, permite_salir=True)
+        if p is None: break
+        pred = red.predecir(p)
+        console.print(f"Salida de la red: {pred}")
+
+def main():
+    while True:
+        console.print(Panel.fit("Simulador de Redes Neuronales\nElige el modelo que deseas ejecutar."))
+        console.print("1. Red de Hopfield")
+        console.print("2. Memoria Asociativa Bidireccional (BAM)")
+        console.print("3. Red de Hamming")
+        console.print("4. Perceptrón Simple")
+        console.print("0. Salir")
+        
+        opcion = Prompt.ask("Selecciona", choices=["1", "2", "3", "4", "0"])
+        
+        if opcion == "1": ejecutar_hopfield()
+        elif opcion == "2": ejecutar_bam()
+        elif opcion == "3": ejecutar_hamming()
+        elif opcion == "4": ejecutar_perceptron()
+        elif opcion == "0": break
 
 if __name__ == "__main__":
     main()
