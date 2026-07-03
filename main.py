@@ -22,7 +22,8 @@ def capturar_vector(mensaje, tamano, permite_salir=False):
             return None
             
         try:
-            vec = np.array([int(x) for x in entrada.split()])
+            vec = np.array([float(x) for x in entrada.split()])
+            
             if len(vec) not in tamanos_validos:
                 if len(tamanos_validos) == 1:
                     console.print(f"Error: El vector debe tener {tamanos_validos[0]} elementos.")
@@ -261,12 +262,26 @@ def ejecutar_hamming():
 def ejecutar_perceptron():
     console.print(Panel.fit("Módulo: Perceptrón Simple"))
     
-    num_entradas = IntPrompt.ask("¿Número de entradas (tamaño del vector)?")
+    num_entradas = IntPrompt.ask("¿Número de entradas (tamaño del vector X)?")
     num_patrones = IntPrompt.ask("¿Cuántos pares de entrenamiento (X -> Y) ingresarás?")
-    tasa_lr = FloatPrompt.ask("Tasa de aprendizaje (Alpha)", default=0.1)
+    tasa_lr = FloatPrompt.ask("Tasa de aprendizaje (Alpha)", default=1.0)
+    
+    # --- NUEVA SECCIÓN DE INICIALIZACIÓN ---
+    console.print("\n[Inicialización]")
+    tipo_init = Prompt.ask("¿Cómo deseas iniciar los Pesos (W)?", choices=["1", "2", "3"], default="1")
+    # 1=Ceros, 2=Random, 3=Manual
+    
+    pesos_init = None
+    if tipo_init == "3":
+        pesos_init = capturar_vector("Ingresa los pesos iniciales W separados por espacio", num_entradas)
+    elif tipo_init == "2":
+        pesos_init = np.random.uniform(-1, 1, num_entradas)
+        console.print(f"Pesos random generados: {np.round(pesos_init, 2)}")
+        
+    bias_init = FloatPrompt.ask("Ingresa el Bias inicial (b) o Theta", default=0.0)
     
     X_train, Y_train = [], []
-    console.print("\nCaptura de pares:")
+    console.print("\nCaptura de pares de entrenamiento:")
     for i in range(num_patrones):
         console.print(f"\n--- Patrón {i+1} ---")
         x = capturar_vector("Vector de entrada X", num_entradas)
@@ -274,26 +289,66 @@ def ejecutar_perceptron():
         X_train.append(x)
         Y_train.append(y)
         
-    red = PerceptronSimple(num_entradas, tasa_aprendizaje=tasa_lr)
+    # Inicializamos la red con los datos recabados
+    red = PerceptronSimple(
+        num_entradas=num_entradas, 
+        tasa_aprendizaje=tasa_lr, 
+        pesos_iniciales=pesos_init, 
+        bias_inicial=bias_init
+    )
+    
     historial = red.entrenar(X_train, Y_train)
     
     tabla = Table(title="Historial de Entrenamiento (Regla Delta)")
-    tabla.add_column("Época")
+    tabla.add_column("Época", justify="center")
     tabla.add_column("Pesos (W)")
     tabla.add_column("Bias (b)")
-    tabla.add_column("Errores")
+    tabla.add_column("Precisión (%)", justify="center", style="bold green")
     
+    # Calculamos el porcentaje fila por fila
     for ep, w, b, err in historial:
-        tabla.add_row(str(ep), str(np.round(w, 4)), str(round(b, 4)), str(err))
+        aciertos = num_patrones - err
+        porcentaje = (aciertos / num_patrones) * 100
+        
+        tabla.add_row(
+            str(ep), 
+            str(np.round(w, 4)), 
+            str(round(b, 4)), 
+            f"{porcentaje:.1f}%"  # Formatea a 1 decimal y le pone el signo %
+        )
+        
     console.print(tabla)
     
     console.print("\n--- FASE DE PRUEBA ---")
     while True:
         p = capturar_vector("\nIngresa vector de prueba (o 'salir')", num_entradas, permite_salir=True)
         if p is None: break
+        
+        # Predicción interna
         pred = red.predecir(p)
-        console.print(f"Salida de la red: {pred}")
-
+        
+        # Desglose Matemático para la consola
+        w_str = f"[{', '.join(str(round(w, 4)) for w in red.W)}]"
+        p_str = f"[{', '.join(str(round(x, 4)) for x in p)}]"
+        
+        # Armamos la cadena de multiplicaciones "(W1*X1) + (W2*X2)..."
+        operaciones = " + ".join([f"({round(w,4)} * {round(x,4)})" for w, x in zip(red.W, p)])
+        suma_productos = np.dot(red.W, p)
+        net = suma_productos + red.b
+        
+        console.print(Panel((
+            f"[bold cyan]1. Datos actuales:[/bold cyan]\n"
+            f"   Pesos (W) = {w_str}\n"
+            f"   Entrada (X) = {p_str}\n"
+            f"   Bias (b) = {round(red.b, 4)}\n\n"
+            f"[bold cyan]2. Producto Punto (W · X):[/bold cyan]\n"
+            f"   {operaciones} = {round(suma_productos, 4)}\n\n"
+            f"[bold cyan]3. Suma del Bias (Net):[/bold cyan]\n"
+            f"   {round(suma_productos, 4)} + ({round(red.b, 4)}) = [bold yellow]{round(net, 4)}[/bold yellow]\n\n"
+            f"[bold cyan]4. Función de Activación:[/bold cyan]\n"
+            f"   Como {round(net, 4)} {'[bold green]>= 0[/bold green]' if net >= 0 else '[bold red]< 0[/bold red]'}, "
+            f"la salida es: [bold magenta]{pred}[/bold magenta]"
+        ), title="Desglose Matemático de la Predicción", expand=False))
 def main():
     while True:
         console.print(Panel.fit("Simulador de Redes Neuronales\nElige el modelo que deseas ejecutar."))

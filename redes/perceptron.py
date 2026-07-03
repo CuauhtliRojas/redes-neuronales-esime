@@ -1,9 +1,16 @@
 import numpy as np
 
 class PerceptronSimple:
-    def __init__(self, num_entradas, tasa_aprendizaje=0.1, tipo_func="bipolar"):
-        self.W = np.zeros(num_entradas)
-        self.b = 0.0
+    def __init__(self, num_entradas, tasa_aprendizaje=0.1, pesos_iniciales=None, bias_inicial=0.0, tipo_func="bipolar"):
+        # Si el usuario mandó pesos, los usamos. Si no, los hacemos ceros (o random si prefieres)
+        if pesos_iniciales is not None:
+            self.W = np.array(pesos_iniciales, dtype=float)
+        else:
+            self.W = np.zeros(num_entradas)
+            # Nota: Si tu maestra exige random, cambia la línea de arriba por:
+            # self.W = np.random.uniform(-1, 1, num_entradas)
+            
+        self.b = float(bias_inicial)
         self.lr = tasa_aprendizaje
         self.tipo_func = tipo_func
 
@@ -26,13 +33,15 @@ class PerceptronSimple:
                 error = y_deseada - y_pred
                 
                 if error != 0:
-                    # Regla de aprendizaje (Regla Delta)
+                    # Regla Delta: W_nuevo = W_viejo + (alpha * error * X)
                     self.W += self.lr * error * x
+                    # Actualización del bias separada (Matemáticamente equivalente al vector aumentado)
                     self.b += self.lr * error
                     errores += 1
                     
             historial.append((epoca + 1, self.W.copy(), self.b, errores))
             
+            # Condición de paro: Si dio 0 errores en esta época, ya aprendió.
             if errores == 0:
                 break
         return historial
